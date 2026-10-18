@@ -1,0 +1,16 @@
+{
+  "dataset": "lakshmi25npathi/imdb-dataset-of-50k-movie-reviews",
+  "prediction_task": "IMDb review sentiment (positive vs negative)",
+  "selected_model": "Linear SVM (C=0.5)",
+  "train_size": 40016,
+  "validation_size": 8002,
+  "test_size": 9984,
+  "random_state": 42,
+  "accuracy": 0.9229767628205128,
+  "precision": 0.9164214243672749,
+  "recall": 0.9315915436777025,
+  "f1": 0.9239442191672436,
+  "roc_auc": 0.9749600113645576,
+  "majority_baseline_accuracy": 0.5022035256410257,
+  "features": "TF-IDF unigram + bigram terms from full review text"
+}
