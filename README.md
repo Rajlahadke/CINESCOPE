@@ -13,6 +13,7 @@ py -3.12 -m venv .venv
 ```
 
 Then visit http://localhost:8501.
+Streamlit link - https://cinescope-cbjmnsje2yzklcqikuarao.streamlit.app
 
 ## Train the sentiment model in Colab
 
