@@ -21,6 +21,9 @@ CORAL = "#fa8b80"
 GOLD = "#f8c879"
 COLORS = [VIOLET, CYAN, CORAL, GOLD, "#7ea5ff", "#86dba7", "#d6a4e8"]
 
+# Extra inputs used by the upgraded model (post-release signals + one simulated feature)
+EXTRA_FEATURES = ["vote_count", "popularity", "revenue", "simulated_critic_score"]
+
 st.set_page_config(
     page_title="Cinescope | Movie Rating Intelligence",
     page_icon="🎬",
@@ -96,8 +99,12 @@ def load_data():
 
 @st.cache_resource(show_spinner="Loading trained models...")
 def load_models():
-    native_path = ROOT / "rating_xgboost.json"
-    preprocess_path = ROOT / "rating_preprocessor.pkl"
+    # Prefer the "_2" files; fall back to the un-suffixed names exported from Colab.
+    native_path = ROOT / "rating_xgboost_2.json"
+    preprocess_path = ROOT / "rating_preprocessor_2.pkl"
+    if not (native_path.exists() and preprocess_path.exists()):
+        native_path = ROOT / "rating_xgboost.json"
+        preprocess_path = ROOT / "rating_preprocessor.pkl"
     if native_path.exists() and preprocess_path.exists():
         from sklearn.pipeline import Pipeline
         from xgboost import XGBRegressor
@@ -119,6 +126,20 @@ def load_models():
             ) from error
     classification_model = joblib.load(ROOT / "movie_classification_model.pkl")
     return regression_model, classification_model
+
+
+def align_to_model(frame, model):
+    """Return `frame` with exactly the columns (and order) the fitted model expects.
+    Columns the model wants but we do not have are filled with NaN (the saved imputer handles them);
+    columns the model does not know are dropped. This lets old and new model files both work."""
+    expected = getattr(model, "feature_names_in_", None)
+    if expected is None:
+        return frame
+    frame = frame.copy()
+    for col in expected:
+        if col not in frame.columns:
+            frame[col] = np.nan
+    return frame[list(expected)]
 
 
 def header(label, title, description):
@@ -420,9 +441,14 @@ def predictor(df, info):
         st.exception(exc)
         st.stop()
 
+    # Which input columns does the loaded regression model actually expect?
+    expected = list(getattr(regression_model, "feature_names_in_", info["features"]))
+    uses_extras = [f for f in EXTRA_FEATURES if f in expected]
+
     genres = df["primary_genre"].value_counts().index.tolist()
     languages = df["original_language"].value_counts().index.tolist()
     countries = df["primary_country"].value_counts().index.tolist()
+    extras = {}
     with st.form("predict_form"):
         section("Movie details", "Enter film information available before its release")
         a, b, c = st.columns(3, gap="large")
@@ -438,10 +464,30 @@ def predictor(df, info):
             country = st.selectbox("Primary production country", countries, index=0)
             budget_unknown = st.checkbox("Budget unknown", value=False)
             budget_millions = st.number_input("Production budget (USD millions)", min_value=0.0, max_value=1000.0, value=30.0, step=5.0, disabled=budget_unknown)
+
+        if uses_extras:
+            section("Extra signals (upgraded model)", "These inputs are only used by the upgraded model. Leave 'unknown' ticked to let the model fill typical values.")
+            d, e, f_, g = st.columns(4, gap="large")
+            if "vote_count" in uses_extras:
+                with d:
+                    votes_unknown = st.checkbox("Vote count unknown", value=False)
+                    extras["vote_count"] = np.nan if votes_unknown else float(st.number_input("Vote count", min_value=0, max_value=2_000_000, value=500, step=50, disabled=votes_unknown))
+            if "popularity" in uses_extras:
+                with e:
+                    pop_unknown = st.checkbox("Popularity unknown", value=False)
+                    extras["popularity"] = np.nan if pop_unknown else float(st.number_input("Popularity score", min_value=0.0, max_value=600.0, value=10.0, step=1.0, disabled=pop_unknown))
+            if "revenue" in uses_extras:
+                with f_:
+                    rev_unknown = st.checkbox("Revenue unknown", value=True)
+                    revenue_millions = st.number_input("Revenue (USD millions)", min_value=0.0, max_value=3000.0, value=50.0, step=10.0, disabled=rev_unknown)
+                    extras["revenue"] = np.nan if rev_unknown else revenue_millions * 1_000_000
+            if "simulated_critic_score" in uses_extras:
+                with g:
+                    extras["simulated_critic_score"] = float(st.slider("Simulated critic score (experimental)", 0.0, 10.0, 6.5, 0.1))
         submitted = st.form_submit_button("✦ Predict movie rating", type="primary", use_container_width=True)
 
     if submitted:
-        movie = pd.DataFrame([{
+        row = {
             "budget": np.nan if budget_unknown else budget_millions * 1_000_000,
             "runtime": np.nan if runtime_unknown else float(runtime),
             "release_year": int(year),
@@ -449,10 +495,12 @@ def predictor(df, info):
             "primary_genre": genre,
             "original_language": language,
             "primary_country": country,
-        }], columns=info["features"])
+        }
+        row.update(extras)
+        movie = pd.DataFrame([row])
         try:
-            score = float(regression_model.predict(movie)[0])
-            classification = int(classification_model.predict(movie)[0])
+            score = float(regression_model.predict(align_to_model(movie, regression_model))[0])
+            classification = int(classification_model.predict(align_to_model(movie, classification_model))[0])
         except Exception as exc:
             st.error("Prediction failed. The models may have been exported with incompatible dependencies.")
             st.exception(exc)
@@ -461,10 +509,11 @@ def predictor(df, info):
         section("Your predicted result")
         a, b = st.columns([1.05, 1], gap="large")
         with a:
+            kind = "pre-release" if not uses_extras else "input"
             st.markdown(
                 f'<div class="movie-panel"><div class="eyebrow">XGBoost predicted rating</div>'
                 f'<div class="result-score">{display_score:.2f}<span style="font-size:1.3rem;color:#9faacf"> / 10</span></div>'
-                f'<div class="caption-small">Regression estimate from seven pre-release features</div></div>',
+                f'<div class="caption-small">Regression estimate from {len(expected)} {kind} features</div></div>',
                 unsafe_allow_html=True,
             )
         with b:
@@ -487,9 +536,21 @@ def predictor(df, info):
         if len(peers):
             peers = peers.assign(year_gap=(peers["release_year"]-year).abs()).sort_values(["year_gap", "vote_count"], ascending=[True, False]).head(6)
             st.dataframe(peers[["title", "release_year", "vote_average", "vote_count"]].rename(columns={"title": "Title", "release_year": "Year", "vote_average": "Actual rating", "vote_count": "Votes"}), use_container_width=True, hide_index=True)
-        note("Predictions are educational estimates, not guaranteed future ratings. A test RMSE around 0.765 points indicates substantial uncertainty for individual films. No votes, revenue, or popularity are fed into this model.")
+
+        rmse = None
+        metrics = info.get("regression_metrics") or []
+        if metrics:
+            rmse = min(m["RMSE"] for m in metrics if "RMSE" in m)
+        rmse_text = f"A test RMSE around {rmse:.3f} points" if rmse is not None else "The test RMSE"
+        if uses_extras:
+            note(f"{rmse_text} applies to this upgraded model. It also uses post-release signals (votes, popularity, revenue) and a simulated critic score that is derived from the true rating plus noise, so its accuracy reflects those inputs and is not a genuine pre-release forecast. Predictions are educational estimates.")
+        else:
+            note(f"Predictions are educational estimates, not guaranteed future ratings. {rmse_text} indicates substantial uncertainty for individual films. No votes, revenue, or popularity are fed into this model.")
     else:
-        note("Tip: Missing budgets and runtimes are handled by the model's saved preprocessing pipeline. Predictions reflect historical training patterns up to 2017. Press the purple button when ready.")
+        if uses_extras:
+            note("Tip: this upgraded model also reads vote count, popularity, revenue and a simulated critic score. The critic score strongly drives the prediction. Tick 'unknown' to let the saved preprocessing fill typical values. Press the purple button when ready.")
+        else:
+            note("Tip: Missing budgets and runtimes are handled by the model's saved preprocessing pipeline. Predictions reflect historical training patterns up to 2017. Press the purple button when ready.")
 
 
 
@@ -630,7 +691,10 @@ def models(df, regression, classification, info):
         with b:
             section("Full regression comparison")
             st.dataframe(regression.style.format({"MAE": "{:.3f}", "MSE": "{:.3f}", "RMSE": "{:.3f}", "R2": "{:.3f}"}), use_container_width=True, hide_index=True, height=388)
-        note(f"{best['Model']} has the lowest test RMSE ({best['RMSE']:.3f}), but an R² of {best['R2']:.3f} means it explains only about {best['R2']:.0%} of test-set rating variance. This is useful as a demonstration, not a precision-rating guarantee.")
+        if best["R2"] >= 0.6:
+            note(f"{best['Model']} has the lowest test RMSE ({best['RMSE']:.3f}) and an R² of {best['R2']:.3f}. This upgraded benchmark includes post-release signals (votes, popularity, revenue) and a simulated critic-score feature built from the true rating plus noise, so it should not be read as pre-release prediction accuracy.")
+        else:
+            note(f"{best['Model']} has the lowest test RMSE ({best['RMSE']:.3f}), but an R² of {best['R2']:.3f} means it explains only about {best['R2']:.0%} of test-set rating variance. This is useful as a demonstration, not a precision-rating guarantee.")
     with tab2:
         chosen = classification.loc[classification["Model"] == info["best_classifier"]].iloc[0]
         a, b, c, d = st.columns(4)
@@ -648,7 +712,11 @@ def models(df, regression, classification, info):
         with b:
             section("Full classification comparison")
             st.dataframe(classification.style.format({col: "{:.3f}" for col in ["Accuracy", "Precision", "Recall", "F1", "ROC_AUC"]}), use_container_width=True, hide_index=True, height=388)
-        note("KNN has the highest accuracy here, but the saved SVM was selected for its stronger F1 and ROC-AUC. The classes were defined using a 7/10 threshold; high accuracy alone can be misleading when classes are imbalanced.")
+        top_acc = classification.sort_values("Accuracy", ascending=False).iloc[0]["Model"]
+        if top_acc != chosen["Model"]:
+            note(f"{top_acc} has the highest accuracy here, but the saved {chosen['Model']} was selected for its stronger F1 and ROC-AUC. The classes were defined using a 7/10 threshold; high accuracy alone can be misleading when classes are imbalanced.")
+        else:
+            note(f"{chosen['Model']} has the highest accuracy and was selected as the saved classifier. The classes were defined using a 7/10 threshold; high accuracy alone can be misleading when classes are imbalanced.")
     section("Model input schema", "Features stored in both fitted preprocessing pipelines")
     st.dataframe(pd.DataFrame({"Feature": info["features"], "Type": ["Numeric" if f in info["numeric_features"] else "Categorical" for f in info["features"]]}), hide_index=True, use_container_width=True)
 
@@ -677,10 +745,10 @@ if page == "Overview":
     overview(movies, regression_results, classification_results, model_info)
 elif page == "Movie explorer":
     explore(movies)
-elif page == "Statistics lab":
-    statistics(movies)
 elif page == "Correlations":
     correlations(movies)
+elif page == "Statistics lab":
+    statistics(movies)
 elif page == "Rating predictor":
     predictor(movies, model_info)
 elif page == "Review sentiment":
