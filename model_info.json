@@ -1,0 +1,135 @@
+{
+  "dataset": "rounakbanik/the-movies-dataset",
+  "target": "vote_average",
+  "target_range": [
+    0,
+    10
+  ],
+  "classification_threshold": 7.0,
+  "features": [
+    "budget",
+    "runtime",
+    "release_year",
+    "genre_count",
+    "primary_genre",
+    "original_language",
+    "primary_country",
+    "vote_count",
+    "popularity",
+    "revenue",
+    "simulated_critic_score"
+  ],
+  "numeric_features": [
+    "budget",
+    "runtime",
+    "release_year",
+    "genre_count",
+    "vote_count",
+    "popularity",
+    "revenue",
+    "simulated_critic_score"
+  ],
+  "categorical_features": [
+    "primary_genre",
+    "original_language",
+    "primary_country"
+  ],
+  "best_regressor": "XGBoost",
+  "best_classifier": "Logistic Regression",
+  "test_size": 0.2,
+  "random_state": 42,
+  "minimum_vote_count_used": 20,
+  "regression_metrics": [
+    {
+      "Model": "XGBoost",
+      "MAE": 0.27429928376277285,
+      "MSE": 0.11960862627524624,
+      "RMSE": 0.3458448008503905,
+      "R2": 0.8706650543944157
+    },
+    {
+      "Model": "Gradient Boosting",
+      "MAE": 0.28017282156050494,
+      "MSE": 0.12464374985961058,
+      "RMSE": 0.3530492173332361,
+      "R2": 0.865220485259389
+    },
+    {
+      "Model": "Random Forest",
+      "MAE": 0.28099760482312924,
+      "MSE": 0.12505648514018186,
+      "RMSE": 0.35363326362233216,
+      "R2": 0.8647741872228297
+    },
+    {
+      "Model": "Ridge Regression",
+      "MAE": 0.28553353130462256,
+      "MSE": 0.1292223347728685,
+      "RMSE": 0.35947508226978475,
+      "R2": 0.8602695795500963
+    },
+    {
+      "Model": "Linear Regression",
+      "MAE": 0.2865036761885773,
+      "MSE": 0.13016953961485145,
+      "RMSE": 0.3607901600859583,
+      "R2": 0.8592453500230948
+    },
+    {
+      "Model": "Lasso Regression",
+      "MAE": 0.29074675816370754,
+      "MSE": 0.1333608219886231,
+      "RMSE": 0.36518601012172286,
+      "R2": 0.855794559347897
+    },
+    {
+      "Model": "Decision Tree",
+      "MAE": 0.2986526932989196,
+      "MSE": 0.14170896071113953,
+      "RMSE": 0.37644250651479244,
+      "R2": 0.8467675677235649
+    }
+  ],
+  "classification_metrics": [
+    {
+      "Model": "Logistic Regression",
+      "Accuracy": 0.8870833333333333,
+      "Precision": 0.7058823529411765,
+      "Recall": 0.9215017064846417,
+      "F1": 0.7994078460399704,
+      "ROC_AUC": 0.9630274204048149
+    },
+    {
+      "Model": "SVM",
+      "Accuracy": 0.8829166666666667,
+      "Precision": 0.6947637292464879,
+      "Recall": 0.9283276450511946,
+      "F1": 0.7947406866325786,
+      "ROC_AUC": 0.963065990344345
+    },
+    {
+      "Model": "Random Forest",
+      "Accuracy": 0.8775,
+      "Precision": 0.6825,
+      "Recall": 0.931740614334471,
+      "F1": 0.7878787878787878,
+      "ROC_AUC": 0.954683143243111
+    },
+    {
+      "Model": "Decision Tree",
+      "Accuracy": 0.8604166666666667,
+      "Precision": 0.653610771113831,
+      "Recall": 0.9112627986348123,
+      "F1": 0.7612259444048468,
+      "ROC_AUC": 0.9480538172951372
+    },
+    {
+      "Model": "KNN",
+      "Accuracy": 0.8775,
+      "Precision": 0.827354260089686,
+      "Recall": 0.6296928327645052,
+      "F1": 0.7151162790697675,
+      "ROC_AUC": 0.9433972026445807
+    }
+  ]
+}
